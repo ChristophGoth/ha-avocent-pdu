@@ -389,8 +389,13 @@ async def async_setup_platform(
         hass, host, port, community, pdu_id, name, scan_interval
     )
 
-    # Fetch first data synchronously so entities can be set up with initial state.
-    await coordinator.async_config_entry_first_refresh()
+    # Fetch initial data. We use async_refresh() here because this is a
+    # YAML-based platform (async_setup_platform), not a config entry.
+    # async_config_entry_first_refresh() is only valid in async_setup_entry().
+    try:
+        await coordinator.async_refresh()
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("avocent_pdu: initial SNMP poll failed, will retry: %s", err)
 
     device_info = DeviceInfo(
         identifiers={(DOMAIN, f"{host}_{pdu_id}")},
@@ -400,6 +405,17 @@ async def async_setup_platform(
         sw_version=coordinator.data["pdu"].get("model", "PM3000"),
         configuration_url=f"http://{host}/",
     )
+
+    # If initial refresh failed coordinator.data will be None; bail out gracefully.
+    # The coordinator will keep retrying on its own schedule.
+    if coordinator.data is None:
+        _LOGGER.error(
+            "avocent_pdu: could not reach PDU %s during setup – "
+            "check host/community and ensure SNMP is reachable. "
+            "The integration will retry automatically.",
+            host,
+        )
+        return
 
     entities: list[SensorEntity] = []
 
