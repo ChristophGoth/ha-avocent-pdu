@@ -88,7 +88,7 @@ from .const import (
     OID_PDU_POWER, OID_PDU_POWER_MIN, OID_PDU_POWER_MAX, OID_PDU_POWER_AVG,
     OID_PDU_POWER_FACTOR,
     OID_PDU_ENERGY,
-    OID_OUTLET_NAME, OID_OUTLET_STATUS, OID_OUTLET_PORT, OID_OUTLET_PDU_ID,
+    OID_OUTLET_NAME, OID_OUTLET_STATUS,
     OID_OUTLET_CURRENT, OID_OUTLET_CURRENT_MIN, OID_OUTLET_CURRENT_MAX,
     OID_OUTLET_VOLTAGE,
     OID_OUTLET_POWER, OID_OUTLET_POWER_MIN, OID_OUTLET_POWER_MAX,
@@ -327,51 +327,51 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
         }
 
         # ── Outlet discovery via SNMP walk ────────────────────────────────────
-        # Walk the outlet-name, outlet-port and outlet-pdu-id subtrees once each
-        # to discover which SNMP indices belong to our pdu_id.
-        names_raw    = await _snmp_walk(self.host, self.port, self.community, OID_OUTLET_NAME)
-        ports_raw    = await _snmp_walk(self.host, self.port, self.community, OID_OUTLET_PORT)
-        pdu_ids_raw  = await _snmp_walk(self.host, self.port, self.community, OID_OUTLET_PDU_ID)
+        # Walk the outlet-name column once. Each cell is indexed as
+        #   {OID_OUTLET_NAME}.1.{pdu}.{outlet}
+        # so the two trailing OID components are the PDU chain position and the
+        # 1-based outlet number. Keep only the outlets that belong to our pdu_id.
+        names_raw = await _snmp_walk(self.host, self.port, self.community, OID_OUTLET_NAME)
 
-        # Build index→(name, port, pdu_id) map; filter to our pdu_id
-        outlets_meta: dict[str, dict] = {}  # snmp_index → metadata
+        # Build {outlet_number: name} for our PDU, preserving the index suffix
+        # used to address each cell in the per-outlet GET below.
+        outlets_meta: dict[int, dict] = {}  # outlet_number → metadata
         for oid_str, name_val in names_raw.items():
-            # SNMP index is the last OID component
-            idx = oid_str.split(".")[-1]
-            this_pdu = _get_int(pdu_ids_raw.get(f"{OID_OUTLET_PDU_ID}.{idx}"))
-            if this_pdu != pdu_id:
+            parts = oid_str.split(".")
+            # …{OID_OUTLET_NAME}.1.{pdu}.{outlet}  → take the last two components
+            this_pdu = _get_int(parts[-2])
+            outlet_num = _get_int(parts[-1])
+            if this_pdu != pdu_id or outlet_num is None:
                 continue
-            port_num = _get_int(ports_raw.get(f"{OID_OUTLET_PORT}.{idx}"))
-            if port_num is None:
-                continue
-            outlets_meta[idx] = {
-                "port":  port_num,
+            outlets_meta[outlet_num] = {
                 "name":  _str_value(name_val),
+                # OID suffix that addresses this outlet's cells: ".1.{pdu}.{outlet}"
+                "suffix": f".1.{pdu_id}.{outlet_num}",
             }
 
         # ── Per-outlet GET ────────────────────────────────────────────────────
         outlets_data: dict[int, dict[str, Any]] = {}
 
-        for idx, meta in outlets_meta.items():
+        for outlet_num, meta in outlets_meta.items():
+            sfx = meta["suffix"]
             outlet_oids = {
-                "status":       f"{OID_OUTLET_STATUS}.{idx}",
-                "current":      f"{OID_OUTLET_CURRENT}.{idx}",
-                "current_min":  f"{OID_OUTLET_CURRENT_MIN}.{idx}",
-                "current_max":  f"{OID_OUTLET_CURRENT_MAX}.{idx}",
-                "voltage":      f"{OID_OUTLET_VOLTAGE}.{idx}",
-                "power":        f"{OID_OUTLET_POWER}.{idx}",
-                "power_min":    f"{OID_OUTLET_POWER_MIN}.{idx}",
-                "power_max":    f"{OID_OUTLET_POWER_MAX}.{idx}",
-                "power_factor": f"{OID_OUTLET_POWER_FACTOR}.{idx}",
-                "energy":       f"{OID_OUTLET_ENERGY}.{idx}",
+                "status":       f"{OID_OUTLET_STATUS}{sfx}",
+                "current":      f"{OID_OUTLET_CURRENT}{sfx}",
+                "current_min":  f"{OID_OUTLET_CURRENT_MIN}{sfx}",
+                "current_max":  f"{OID_OUTLET_CURRENT_MAX}{sfx}",
+                "voltage":      f"{OID_OUTLET_VOLTAGE}{sfx}",
+                "power":        f"{OID_OUTLET_POWER}{sfx}",
+                "power_min":    f"{OID_OUTLET_POWER_MIN}{sfx}",
+                "power_max":    f"{OID_OUTLET_POWER_MAX}{sfx}",
+                "power_factor": f"{OID_OUTLET_POWER_FACTOR}{sfx}",
+                "energy":       f"{OID_OUTLET_ENERGY}{sfx}",
             }
             raw_o = await _snmp_get(
                 self.host, self.port, self.community, list(outlet_oids.values())
             )
             raw_o = {k: raw_o[v] for k, v in outlet_oids.items()}
 
-            port = meta["port"]
-            outlets_data[port] = {
+            outlets_data[outlet_num] = {
                 "name":         meta["name"],
                 "status":       OUTLET_STATUS_MAP.get(_get_int(raw_o["status"]), "unknown"),
                 "power":        _scale(raw_o["power"],        0.1),
