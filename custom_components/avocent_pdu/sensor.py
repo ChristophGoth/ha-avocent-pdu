@@ -59,6 +59,7 @@ from homeassistant.const import (
     UnitOfElectricPotential,
     CONF_HOST,
     CONF_NAME,
+    CONF_SCAN_INTERVAL,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
@@ -106,9 +107,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_COMMUNITY, default=DEFAULT_COMMUNITY): cv.string,
         vol.Optional(CONF_PDU_ID, default=DEFAULT_PDU_ID): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=5)
-        ),
-        vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
-            vol.Coerce(int), vol.Range(min=10, max=3600)
         ),
     }
 )
@@ -377,12 +375,15 @@ async def async_setup_platform(
 ) -> None:
     """Set up the Avocent PDU sensor platform from configuration.yaml."""
 
-    host          = config[CONF_HOST]
-    port          = config.get(CONF_PORT, DEFAULT_PORT)
-    community     = config.get(CONF_COMMUNITY, DEFAULT_COMMUNITY)
-    pdu_id        = config.get(CONF_PDU_ID, DEFAULT_PDU_ID)
-    name          = config.get(CONF_NAME, "PDU")
-    scan_interval = config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    host      = config[CONF_HOST]
+    port      = config.get(CONF_PORT, DEFAULT_PORT)
+    community = config.get(CONF_COMMUNITY, DEFAULT_COMMUNITY)
+    pdu_id    = config.get(CONF_PDU_ID, DEFAULT_PDU_ID)
+    name      = config.get(CONF_NAME, "PDU")
+    # CONF_SCAN_INTERVAL is handled natively by HA's PLATFORM_SCHEMA and
+    # arrives as a timedelta. Fall back to DEFAULT_SCAN_INTERVAL (int seconds).
+    _scan = config.get(CONF_SCAN_INTERVAL)
+    scan_interval = int(_scan.total_seconds()) if hasattr(_scan, 'total_seconds') else DEFAULT_SCAN_INTERVAL
 
     coordinator = AvocentPDUCoordinator(
         hass, host, port, community, pdu_id, name, scan_interval
