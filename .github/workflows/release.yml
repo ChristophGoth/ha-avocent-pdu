@@ -1,0 +1,22 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create zip for HACS
+        run: |
+          cd custom_components
+          zip -r ../avocent_pdu.zip avocent_pdu/
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: avocent_pdu.zip
