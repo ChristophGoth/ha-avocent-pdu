@@ -114,15 +114,39 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 
 # ── SNMP helper ───────────────────────────────────────────────────────────────
 
+def _resolve_hlapi():
+    """Return the pysnmp asyncio hlapi names, tolerant of 6.x/7.x naming.
+
+    pysnmp 7.x exposes ``get_cmd``/``walk_cmd`` (snake_case) from
+    ``pysnmp.hlapi.asyncio``; some builds only expose the legacy camelCase
+    ``getCmd``/``nextCmd``. We accept whichever is present so the integration
+    doesn't fail at import with "cannot import name 'get_cmd'".
+    """
+    import pysnmp.hlapi.asyncio as hlapi
+
+    get_cmd = getattr(hlapi, "get_cmd", None) or getattr(hlapi, "getCmd")
+    walk_cmd = getattr(hlapi, "walk_cmd", None) or getattr(hlapi, "nextCmd")
+    return (
+        get_cmd,
+        walk_cmd,
+        hlapi.SnmpEngine,
+        hlapi.CommunityData,
+        hlapi.UdpTransportTarget,
+        hlapi.ContextData,
+        hlapi.ObjectType,
+        hlapi.ObjectIdentity,
+    )
+
+
 async def _snmp_get(host: str, port: int, community: str, oids: list[str]) -> dict[str, Any]:
     """Async SNMPv2c GET for a list of OIDs (pysnmp 7.x API).
 
     Returns {oid_string: raw_value} or raises RuntimeError on failure.
     """
-    from pysnmp.hlapi.asyncio import (
-        get_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
+    (
+        get_cmd, _walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
         ContextData, ObjectType, ObjectIdentity,
-    )
+    ) = _resolve_hlapi()
 
     results: dict[str, Any] = {}
     engine = SnmpEngine()
@@ -152,10 +176,10 @@ async def _snmp_walk(host: str, port: int, community: str, base_oid: str) -> dic
 
     Returns {full_oid_string: value} for every node in the subtree.
     """
-    from pysnmp.hlapi.asyncio import (
-        walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
+    (
+        _get_cmd, walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
         ContextData, ObjectType, ObjectIdentity,
-    )
+    ) = _resolve_hlapi()
 
     results: dict[str, Any] = {}
     engine = SnmpEngine()
