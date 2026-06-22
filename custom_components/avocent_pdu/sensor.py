@@ -40,9 +40,11 @@ Configuration example (configuration.yaml):
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 import voluptuous as vol
 
@@ -142,95 +144,122 @@ def _resolve_hlapi():
     )
 
 
+_T = TypeVar("_T")
+
+
+async def _run_off_loop(coro_factory: Callable[[], Awaitable[_T]]) -> _T:
+    """Run an async pysnmp operation off the Home Assistant event loop.
+
+    pysnmp loads MIB modules lazily with blocking ``os.listdir``/``open`` calls
+    (both when an SnmpEngine is created and when responses are parsed). Doing
+    that on the event loop trips HA's blocking-call detector, so we execute the
+    whole operation in a worker thread that owns its own event loop.
+    """
+    def _runner() -> _T:
+        # asyncio.run() cancels leftover tasks and runs loop shutdown, which
+        # avoids pysnmp's dispatcher leaving "Task was destroyed but pending"
+        # timeout tasks behind when the loop closes.
+        return asyncio.run(coro_factory())
+
+    return await asyncio.get_running_loop().run_in_executor(None, _runner)
+
+
 async def _snmp_set_int(host: str, port: int, community: str, oid: str, value: int) -> None:
-    """Async SNMPv2c SET of a single integer-valued OID (pysnmp 7.x API).
+    """SNMPv2c SET of a single integer-valued OID (runs off the event loop).
 
     Uses the configured community as the write community. Raises RuntimeError
     on any SNMP error so callers can surface a failed switch operation.
     """
-    import pysnmp.hlapi.asyncio as hlapi
+    async def _do() -> None:
+        import pysnmp.hlapi.asyncio as hlapi
 
-    set_cmd = getattr(hlapi, "set_cmd", None) or getattr(hlapi, "setCmd")
-    Integer = hlapi.Integer
+        set_cmd = getattr(hlapi, "set_cmd", None) or getattr(hlapi, "setCmd")
+        Integer = hlapi.Integer
 
-    engine = hlapi.SnmpEngine()
-    transport = await hlapi.UdpTransportTarget.create((host, port), timeout=5, retries=2)
-    auth = hlapi.CommunityData(community, mpModel=1)
+        engine = hlapi.SnmpEngine()
+        transport = await hlapi.UdpTransportTarget.create((host, port), timeout=5, retries=2)
+        auth = hlapi.CommunityData(community, mpModel=1)
 
-    error_indication, error_status, error_index, _ = await set_cmd(
-        engine, auth, transport, hlapi.ContextData(),
-        hlapi.ObjectType(hlapi.ObjectIdentity(oid), Integer(value)),
-    )
-    if error_indication:
-        raise RuntimeError(f"SNMP SET error for {oid}: {error_indication}")
-    if error_status:
-        raise RuntimeError(
-            f"SNMP SET error status {error_status.prettyPrint()} "
-            f"at index {error_index} for {oid}"
+        error_indication, error_status, error_index, _ = await set_cmd(
+            engine, auth, transport, hlapi.ContextData(),
+            hlapi.ObjectType(hlapi.ObjectIdentity(oid), Integer(value)),
         )
+        if error_indication:
+            raise RuntimeError(f"SNMP SET error for {oid}: {error_indication}")
+        if error_status:
+            raise RuntimeError(
+                f"SNMP SET error status {error_status.prettyPrint()} "
+                f"at index {error_index} for {oid}"
+            )
+
+    await _run_off_loop(_do)
 
 
 async def _snmp_get(host: str, port: int, community: str, oids: list[str]) -> dict[str, Any]:
-    """Async SNMPv2c GET for a list of OIDs (pysnmp 7.x API).
+    """SNMPv2c GET for a list of OIDs (runs off the event loop).
 
     Returns {oid_string: raw_value} or raises RuntimeError on failure.
     """
-    (
-        get_cmd, _walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
-        ContextData, ObjectType, ObjectIdentity,
-    ) = _resolve_hlapi()
+    async def _do() -> dict[str, Any]:
+        (
+            get_cmd, _walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
+            ContextData, ObjectType, ObjectIdentity,
+        ) = _resolve_hlapi()
 
-    results: dict[str, Any] = {}
-    engine = SnmpEngine()
-    transport = await UdpTransportTarget.create((host, port), timeout=5, retries=2)
-    auth = CommunityData(community, mpModel=1)  # mpModel=1 → SNMPv2c
+        results: dict[str, Any] = {}
+        engine = SnmpEngine()
+        transport = await UdpTransportTarget.create((host, port), timeout=5, retries=2)
+        auth = CommunityData(community, mpModel=1)  # mpModel=1 → SNMPv2c
 
-    for oid in oids:
-        error_indication, error_status, error_index, var_binds = await get_cmd(
-            engine, auth, transport, ContextData(),
-            ObjectType(ObjectIdentity(oid)),
-        )
-        if error_indication:
-            raise RuntimeError(f"SNMP GET error for {oid}: {error_indication}")
-        if error_status:
-            raise RuntimeError(
-                f"SNMP error status {error_status.prettyPrint()} "
-                f"at index {error_index} for {oid}"
+        for oid in oids:
+            error_indication, error_status, error_index, var_binds = await get_cmd(
+                engine, auth, transport, ContextData(),
+                ObjectType(ObjectIdentity(oid)),
             )
-        for var_bind in var_binds:
-            results[oid] = var_bind[1]
+            if error_indication:
+                raise RuntimeError(f"SNMP GET error for {oid}: {error_indication}")
+            if error_status:
+                raise RuntimeError(
+                    f"SNMP error status {error_status.prettyPrint()} "
+                    f"at index {error_index} for {oid}"
+                )
+            for var_bind in var_binds:
+                results[oid] = var_bind[1]
+        return results
 
-    return results
+    return await _run_off_loop(_do)
 
 
 async def _snmp_walk(host: str, port: int, community: str, base_oid: str) -> dict[str, Any]:
-    """Async SNMPv2c GETNEXT walk on base_oid subtree (pysnmp 7.x API).
+    """SNMPv2c GETNEXT walk on base_oid subtree (runs off the event loop).
 
     Returns {full_oid_string: value} for every node in the subtree.
     """
-    (
-        _get_cmd, walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
-        ContextData, ObjectType, ObjectIdentity,
-    ) = _resolve_hlapi()
+    async def _do() -> dict[str, Any]:
+        (
+            _get_cmd, walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
+            ContextData, ObjectType, ObjectIdentity,
+        ) = _resolve_hlapi()
 
-    results: dict[str, Any] = {}
-    engine = SnmpEngine()
-    transport = await UdpTransportTarget.create((host, port), timeout=5, retries=2)
-    auth = CommunityData(community, mpModel=1)
+        results: dict[str, Any] = {}
+        engine = SnmpEngine()
+        transport = await UdpTransportTarget.create((host, port), timeout=5, retries=2)
+        auth = CommunityData(community, mpModel=1)
 
-    async for error_indication, error_status, _, var_binds in walk_cmd(
-        engine, auth, transport, ContextData(),
-        ObjectType(ObjectIdentity(base_oid)),
-        lexicographicMode=False,
-    ):
-        if error_indication:
-            raise RuntimeError(f"SNMP walk error for {base_oid}: {error_indication}")
-        if error_status:
-            raise RuntimeError(f"SNMP walk error status: {error_status.prettyPrint()}")
-        for var_bind in var_binds:
-            results[str(var_bind[0])] = var_bind[1]
+        async for error_indication, error_status, _, var_binds in walk_cmd(
+            engine, auth, transport, ContextData(),
+            ObjectType(ObjectIdentity(base_oid)),
+            lexicographicMode=False,
+        ):
+            if error_indication:
+                raise RuntimeError(f"SNMP walk error for {base_oid}: {error_indication}")
+            if error_status:
+                raise RuntimeError(f"SNMP walk error status: {error_status.prettyPrint()}")
+            for var_bind in var_binds:
+                results[str(var_bind[0])] = var_bind[1]
+        return results
 
-    return results
+    return await _run_off_loop(_do)
 
 
 def _get_int(value: Any) -> int | None:
