@@ -1,0 +1,11 @@
+{
+  "domain": "avocent_pdu",
+  "name": "Avocent PM3000 PDU",
+  "version": "1.0.0",
+  "documentation": "https://github.com/home-assistant/core",
+  "requirements": ["pysnmp==6.2.6"],
+  "dependencies": [],
+  "codeowners": [],
+  "iot_class": "local_polling",
+  "config_flow": false
+}
