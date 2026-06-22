@@ -114,26 +114,25 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 
 # ── SNMP helper ───────────────────────────────────────────────────────────────
 
-def _snmp_get(host: str, port: int, community: str, oids: list[str]) -> dict[str, Any]:
-    """Synchronous SNMPv2c GET for a list of OIDs.
+async def _snmp_get(host: str, port: int, community: str, oids: list[str]) -> dict[str, Any]:
+    """Async SNMPv2c GET for a list of OIDs (pysnmp 7.x API).
 
     Returns {oid_string: raw_value} or raises RuntimeError on failure.
-    Uses pysnmp (bundled with HA via requirements).
     """
-    from pysnmp.hlapi import (
-        getCmd, SnmpEngine, CommunityData, UdpTransportTarget,
+    from pysnmp.hlapi.asyncio import (
+        get_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
         ContextData, ObjectType, ObjectIdentity,
     )
 
     results: dict[str, Any] = {}
     engine = SnmpEngine()
-    transport = UdpTransportTarget((host, port), timeout=5, retries=2)
+    transport = await UdpTransportTarget.create((host, port), timeout=5, retries=2)
     auth = CommunityData(community, mpModel=1)  # mpModel=1 → SNMPv2c
 
     for oid in oids:
-        error_indication, error_status, error_index, var_binds = next(
-            getCmd(engine, auth, transport, ContextData(),
-                   ObjectType(ObjectIdentity(oid)))
+        error_indication, error_status, error_index, var_binds = await get_cmd(
+            engine, auth, transport, ContextData(),
+            ObjectType(ObjectIdentity(oid)),
         )
         if error_indication:
             raise RuntimeError(f"SNMP GET error for {oid}: {error_indication}")
@@ -148,22 +147,22 @@ def _snmp_get(host: str, port: int, community: str, oids: list[str]) -> dict[str
     return results
 
 
-def _snmp_walk(host: str, port: int, community: str, base_oid: str) -> dict[str, Any]:
-    """SNMPv2c GETNEXT walk on base_oid subtree.
+async def _snmp_walk(host: str, port: int, community: str, base_oid: str) -> dict[str, Any]:
+    """Async SNMPv2c GETNEXT walk on base_oid subtree (pysnmp 7.x API).
 
     Returns {full_oid_string: value} for every node in the subtree.
     """
-    from pysnmp.hlapi import (
-        nextCmd, SnmpEngine, CommunityData, UdpTransportTarget,
+    from pysnmp.hlapi.asyncio import (
+        walk_cmd, SnmpEngine, CommunityData, UdpTransportTarget,
         ContextData, ObjectType, ObjectIdentity,
     )
 
     results: dict[str, Any] = {}
     engine = SnmpEngine()
-    transport = UdpTransportTarget((host, port), timeout=5, retries=2)
+    transport = await UdpTransportTarget.create((host, port), timeout=5, retries=2)
     auth = CommunityData(community, mpModel=1)
 
-    for error_indication, error_status, _, var_binds in nextCmd(
+    async for error_indication, error_status, _, var_binds in walk_cmd(
         engine, auth, transport, ContextData(),
         ObjectType(ObjectIdentity(base_oid)),
         lexicographicMode=False,
@@ -262,11 +261,11 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch data from the PDU. Runs SNMP I/O in executor thread."""
         try:
-            return await self.hass.async_add_executor_job(self._fetch_all)
+            return await self._fetch_all()
         except Exception as exc:
             raise UpdateFailed(f"SNMP poll failed for {self.pdu_name}: {exc}") from exc
 
-    def _fetch_all(self) -> dict:
+    async def _fetch_all(self) -> dict:
         pdu_id = self.pdu_id
 
         # ── PDU-level GET ─────────────────────────────────────────────────────
@@ -283,7 +282,7 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
             "power_factor": f"{OID_PDU_POWER_FACTOR}.{pdu_id}",
             "energy":       f"{OID_PDU_ENERGY}.{pdu_id}",
         }
-        raw = _snmp_get(
+        raw = await _snmp_get(
             self.host, self.port, self.community, list(pdu_oids.values())
         )
         # re-key by friendly name
@@ -306,9 +305,9 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
         # ── Outlet discovery via SNMP walk ────────────────────────────────────
         # Walk the outlet-name, outlet-port and outlet-pdu-id subtrees once each
         # to discover which SNMP indices belong to our pdu_id.
-        names_raw    = _snmp_walk(self.host, self.port, self.community, OID_OUTLET_NAME)
-        ports_raw    = _snmp_walk(self.host, self.port, self.community, OID_OUTLET_PORT)
-        pdu_ids_raw  = _snmp_walk(self.host, self.port, self.community, OID_OUTLET_PDU_ID)
+        names_raw    = await _snmp_walk(self.host, self.port, self.community, OID_OUTLET_NAME)
+        ports_raw    = await _snmp_walk(self.host, self.port, self.community, OID_OUTLET_PORT)
+        pdu_ids_raw  = await _snmp_walk(self.host, self.port, self.community, OID_OUTLET_PDU_ID)
 
         # Build index→(name, port, pdu_id) map; filter to our pdu_id
         outlets_meta: dict[str, dict] = {}  # snmp_index → metadata
@@ -342,7 +341,7 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
                 "power_factor": f"{OID_OUTLET_POWER_FACTOR}.{idx}",
                 "energy":       f"{OID_OUTLET_ENERGY}.{idx}",
             }
-            raw_o = _snmp_get(
+            raw_o = await _snmp_get(
                 self.host, self.port, self.community, list(outlet_oids.values())
             )
             raw_o = {k: raw_o[v] for k, v in outlet_oids.items()}
@@ -397,16 +396,7 @@ async def async_setup_platform(
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning("avocent_pdu: initial SNMP poll failed, will retry: %s", err)
 
-    device_info = DeviceInfo(
-        identifiers={(DOMAIN, f"{host}_{pdu_id}")},
-        name=name,
-        manufacturer="Avocent (Vertiv)",
-        model="PM3000",
-        sw_version=coordinator.data["pdu"].get("model", "PM3000"),
-        configuration_url=f"http://{host}/",
-    )
-
-    # If initial refresh failed coordinator.data will be None; bail out gracefully.
+    # If the initial refresh failed coordinator.data is None – bail out early.
     # The coordinator will keep retrying on its own schedule.
     if coordinator.data is None:
         _LOGGER.error(
@@ -416,6 +406,15 @@ async def async_setup_platform(
             host,
         )
         return
+
+    device_info = DeviceInfo(
+        identifiers={(DOMAIN, f"{host}_{pdu_id}")},
+        name=name,
+        manufacturer="Avocent (Vertiv)",
+        model="PM3000",
+        sw_version=coordinator.data["pdu"].get("model", "PM3000"),
+        configuration_url=f"http://{host}/",
+    )
 
     entities: list[SensorEntity] = []
 
