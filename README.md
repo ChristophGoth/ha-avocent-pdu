@@ -40,7 +40,25 @@ HA installs `pysnmp` automatically on first start (via `requirements` in
 
 ---
 
-## Configuration (configuration.yaml)
+## Configuration
+
+### Via the UI (recommended)
+
+**Settings → Devices & services → Add integration → Avocent PM3000 PDU.**
+
+Fill in name, host, community, SNMP port, PDU ID and scan interval. The form
+performs a live SNMP poll and only creates the entry if the PDU is reachable.
+Each entry becomes its own **device** with all sensors grouped under it. The
+scan interval can be changed later via the entry's **Configure** (options) dialog.
+
+For daisy-chained PDUs, add one integration entry per chain position — see
+[Daisy-chained PDUs](#daisy-chained-pdus).
+
+### Via configuration.yaml (legacy, auto-imported)
+
+YAML is still supported for backwards compatibility. On startup each block is
+**imported into a config entry** automatically, after which the YAML can be
+removed:
 
 ```yaml
 sensor:
@@ -71,8 +89,9 @@ When multiple PM3000 units are daisy-chained, they share a **single IP / SNMP
 agent** (the primary). Each PDU in the chain is addressed by its position via
 `pdu_id`: `1` = primary, `2` = first chained unit, and so on (1–5).
 
-Configure **one platform entry per PDU**, all pointing at the **same `host`**,
-differing only in `pdu_id` and `name`:
+Add **one integration entry per PDU** (UI: *Add integration* again for the
+second one), all pointing at the **same host**, differing only in `pdu_id` and
+`name`. The equivalent legacy YAML:
 
 ```yaml
 sensor:

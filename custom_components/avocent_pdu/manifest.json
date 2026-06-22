@@ -2,11 +2,11 @@
   "domain": "avocent_pdu",
   "name": "Avocent PM3000 PDU",
   "codeowners": ["@ChristophGoth"],
-  "config_flow": false,
+  "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/ChristophGoth/ha-avocent-pdu",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/ChristophGoth/ha-avocent-pdu/issues",
   "requirements": ["pysnmp>=7.1.0,<8"],
-  "version": "1.0.6"
+  "version": "1.1.0"
 }

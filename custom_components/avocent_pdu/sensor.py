@@ -61,7 +61,9 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_SCAN_INTERVAL,
 )
+from homeassistant.config_entries import ConfigEntry, SOURCE_IMPORT
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -396,41 +398,62 @@ async def async_setup_platform(
     async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up the Avocent PDU sensor platform from configuration.yaml."""
+    """Deprecated YAML platform – import the config into a config entry.
 
-    host      = config[CONF_HOST]
-    port      = config.get(CONF_PORT, DEFAULT_PORT)
-    community = config.get(CONF_COMMUNITY, DEFAULT_COMMUNITY)
-    pdu_id    = config.get(CONF_PDU_ID, DEFAULT_PDU_ID)
-    name      = config.get(CONF_NAME, "PDU")
-    # CONF_SCAN_INTERVAL is handled natively by HA's PLATFORM_SCHEMA and
-    # arrives as a timedelta. Fall back to DEFAULT_SCAN_INTERVAL (int seconds).
+    Each ``sensor:`` block is forwarded to the config flow's import step so the
+    integration runs through ``async_setup_entry`` and HA creates a proper
+    device. Once imported, the YAML block can be removed.
+    """
+    # CONF_SCAN_INTERVAL arrives as a timedelta from HA's PLATFORM_SCHEMA.
     _scan = config.get(CONF_SCAN_INTERVAL)
-    scan_interval = int(_scan.total_seconds()) if hasattr(_scan, 'total_seconds') else DEFAULT_SCAN_INTERVAL
-
-    coordinator = AvocentPDUCoordinator(
-        hass, host, port, community, pdu_id, name, scan_interval
+    scan_interval = (
+        int(_scan.total_seconds()) if hasattr(_scan, "total_seconds")
+        else DEFAULT_SCAN_INTERVAL
     )
-
-    # Fetch initial data. We use async_refresh() here because this is a
-    # YAML-based platform (async_setup_platform), not a config entry.
-    # async_config_entry_first_refresh() is only valid in async_setup_entry().
-    try:
-        await coordinator.async_refresh()
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("avocent_pdu: initial SNMP poll failed, will retry: %s", err)
-
-    # If the initial refresh failed coordinator.data is None – bail out early.
-    # The coordinator will keep retrying on its own schedule.
-    if coordinator.data is None:
-        _LOGGER.error(
-            "avocent_pdu: could not reach PDU %s during setup – "
-            "check host/community and ensure SNMP is reachable. "
-            "The integration will retry automatically.",
-            host,
+    import_data = {
+        CONF_HOST: config[CONF_HOST],
+        CONF_PORT: config.get(CONF_PORT, DEFAULT_PORT),
+        CONF_COMMUNITY: config.get(CONF_COMMUNITY, DEFAULT_COMMUNITY),
+        CONF_PDU_ID: config.get(CONF_PDU_ID, DEFAULT_PDU_ID),
+        CONF_NAME: config.get(CONF_NAME, "PDU"),
+        CONF_SCAN_INTERVAL: scan_interval,
+    }
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_IMPORT}, data=import_data
+    )
+    if (
+        result.get("type") == FlowResultType.ABORT
+        and result.get("reason") != "already_configured"
+    ):
+        _LOGGER.warning(
+            "avocent_pdu: YAML import for %s aborted: %s",
+            import_data[CONF_HOST], result.get("reason"),
         )
-        return
 
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Avocent PDU sensors from a config entry."""
+    coordinator: AvocentPDUCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entities = _build_entities(
+        coordinator,
+        name=coordinator.pdu_name,
+        host=coordinator.host,
+        pdu_id=coordinator.pdu_id,
+    )
+    async_add_entities(entities)
+
+
+def _build_entities(
+    coordinator: "AvocentPDUCoordinator",
+    name: str,
+    host: str,
+    pdu_id: int,
+) -> list[SensorEntity]:
+    """Build all PDU-level and per-outlet sensor entities for one PDU."""
     device_info = DeviceInfo(
         identifiers={(DOMAIN, f"{host}_{pdu_id}")},
         name=name,
@@ -517,7 +540,7 @@ async def async_setup_platform(
                 )
             )
 
-    async_add_entities(entities)
+    return entities
 
 
 # ── Entity class ──────────────────────────────────────────────────────────────
