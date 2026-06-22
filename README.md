@@ -5,9 +5,22 @@ Custom Component für die **Avocent PM3000 PDU** (und PM2000) via SNMPv2c.
 Erzeugt pro konfigurierter PDU **ein einzelnes HA-Gerät** mit allen Sensor-Entitäten
 darunter gruppiert – statt loser SNMP-Sensoren ohne Gerätezugehörigkeit.
 
+> **KI-generiert** – Dieser Code wurde mit Unterstützung von [Claude](https://claude.ai)
+> (Anthropic) erstellt. Claude ist als Co-Autor in der Git-Historie eingetragen.
+> Der Code wurde vom Repository-Inhaber geprüft und veröffentlicht.
+
 ---
 
 ## Installation
+
+### Via HACS (empfohlen)
+
+1. HACS → ⋮ → **Custom repositories**
+2. URL: `https://github.com/ChristophGoth/ha-avocent-pdu`
+3. Kategorie: **Integration**
+4. **Herunterladen** → Home Assistant neu starten
+
+### Manuell
 
 ```
 config/
@@ -176,3 +189,17 @@ OID-Basis: `1.3.6.1.4.1.10418.17.2.5`
 **pysnmp fehlt:**
 - HA installiert Requirements aus `manifest.json` automatisch. Falls nicht:
   `pip install pysnmp==6.2.6` im HA-venv oder HACS-Python-Umgebung.
+
+---
+
+## Mitwirkende
+
+Entwickelt von **ChristophGoth** mit KI-Unterstützung durch
+**Claude Sonnet** ([Anthropic](https://anthropic.com)).
+
+Claude ist in der Git-Historie als Co-Autor eingetragen gemäß den
+[GitHub-Richtlinien für Co-Autoren](https://docs.github.com/en/pull-requests/committing-changes-to-your-project/creating-and-editing-commits/creating-a-commit-with-multiple-authors):
+
+```
+Co-authored-by: Claude <claude@anthropic.com>
+```
