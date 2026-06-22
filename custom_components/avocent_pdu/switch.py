@@ -45,13 +45,17 @@ async def async_setup_entry(
 
     switches: list[AvocentOutletSwitch] = []
     for outlet_num, outlet in sorted(coordinator.data["outlets"].items()):
-        label = outlet["name"] or f"Port {outlet_num:02d}"
+        # Friendly name: "PortNN - {outlet_name}" (PDU name comes from the device)
+        label = (
+            f"Port{outlet_num:02d} - {outlet['name']}".rstrip(" -")
+            if outlet["name"] else f"Port{outlet_num:02d}"
+        )
         switches.append(
             AvocentOutletSwitch(
                 coordinator=coordinator,
                 device_info=device_info,
                 unique_id=f"{host}_{pdu_id}_port{outlet_num:02d}_switch",
-                name=f"{name} {label}",
+                name=label,
                 suggested_object_id=f"{name_slug}_port{outlet_num:02d}",
                 outlet_num=outlet_num,
             )

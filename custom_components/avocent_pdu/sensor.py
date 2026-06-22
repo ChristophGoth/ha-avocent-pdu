@@ -86,15 +86,15 @@ from .const import (
     DEFAULT_PDU_ID,
     DEFAULT_SCAN_INTERVAL,
     OID_PDU_MODEL,
-    OID_PDU_CURRENT, OID_PDU_CURRENT_MIN, OID_PDU_CURRENT_MAX,
+    OID_PDU_CURRENT,
     OID_PDU_VOLTAGE,
-    OID_PDU_POWER, OID_PDU_POWER_MIN, OID_PDU_POWER_MAX, OID_PDU_POWER_AVG,
+    OID_PDU_POWER, OID_PDU_POWER_AVG,
     OID_PDU_POWER_FACTOR,
     OID_PDU_ENERGY,
     OID_OUTLET_NAME, OID_OUTLET_STATUS,
-    OID_OUTLET_CURRENT, OID_OUTLET_CURRENT_MIN, OID_OUTLET_CURRENT_MAX,
+    OID_OUTLET_CURRENT,
     OID_OUTLET_VOLTAGE,
-    OID_OUTLET_POWER, OID_OUTLET_POWER_MIN, OID_OUTLET_POWER_MAX,
+    OID_OUTLET_POWER,
     OID_OUTLET_POWER_FACTOR,
     OID_OUTLET_ENERGY,
     OUTLET_STATUS_MAP,
@@ -332,12 +332,8 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
         pdu_oids = {
             "model":        f"{OID_PDU_MODEL}.{pdu_id}",
             "current":      f"{OID_PDU_CURRENT}.{pdu_id}",
-            "current_min":  f"{OID_PDU_CURRENT_MIN}.{pdu_id}",
-            "current_max":  f"{OID_PDU_CURRENT_MAX}.{pdu_id}",
             "voltage":      f"{OID_PDU_VOLTAGE}.{pdu_id}",
             "power":        f"{OID_PDU_POWER}.{pdu_id}",
-            "power_min":    f"{OID_PDU_POWER_MIN}.{pdu_id}",
-            "power_max":    f"{OID_PDU_POWER_MAX}.{pdu_id}",
             "power_avg":    f"{OID_PDU_POWER_AVG}.{pdu_id}",
             "power_factor": f"{OID_PDU_POWER_FACTOR}.{pdu_id}",
             "energy":       f"{OID_PDU_ENERGY}.{pdu_id}",
@@ -351,12 +347,8 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
         pdu_data: dict[str, Any] = {
             "model":        _str_value(pdu_raw["model"]),
             "power":        _scale(pdu_raw["power"],        0.1),
-            "power_min":    _scale(pdu_raw["power_min"],    0.1),
-            "power_max":    _scale(pdu_raw["power_max"],    0.1),
             "power_avg":    _scale(pdu_raw["power_avg"],    0.1),
             "current":      _scale(pdu_raw["current"],      0.1),
-            "current_min":  _scale(pdu_raw["current_min"],  0.1),
-            "current_max":  _scale(pdu_raw["current_max"],  0.1),
             "voltage":      _scale(pdu_raw["voltage"],      1.0),
             "power_factor": _scale(pdu_raw["power_factor"], 0.01),
             "energy_kwh":   _wh_to_kwh(pdu_raw["energy"]),
@@ -393,12 +385,8 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
             outlet_oids = {
                 "status":       f"{OID_OUTLET_STATUS}{sfx}",
                 "current":      f"{OID_OUTLET_CURRENT}{sfx}",
-                "current_min":  f"{OID_OUTLET_CURRENT_MIN}{sfx}",
-                "current_max":  f"{OID_OUTLET_CURRENT_MAX}{sfx}",
                 "voltage":      f"{OID_OUTLET_VOLTAGE}{sfx}",
                 "power":        f"{OID_OUTLET_POWER}{sfx}",
-                "power_min":    f"{OID_OUTLET_POWER_MIN}{sfx}",
-                "power_max":    f"{OID_OUTLET_POWER_MAX}{sfx}",
                 "power_factor": f"{OID_OUTLET_POWER_FACTOR}{sfx}",
                 "energy":       f"{OID_OUTLET_ENERGY}{sfx}",
             }
@@ -411,11 +399,7 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
                 "name":         meta["name"],
                 "status":       OUTLET_STATUS_MAP.get(_get_int(raw_o["status"]), "unknown"),
                 "power":        _scale(raw_o["power"],        0.1),
-                "power_min":    _scale(raw_o["power_min"],    0.1),
-                "power_max":    _scale(raw_o["power_max"],    0.1),
                 "current":      _scale(raw_o["current"],      0.1),
-                "current_min":  _scale(raw_o["current_min"],  0.1),
-                "current_max":  _scale(raw_o["current_max"],  0.1),
                 "voltage":      _scale(raw_o["voltage"],      1.0),
                 "power_factor": _scale(raw_o["power_factor"], 0.01),
                 "energy_kwh":   _wh_to_kwh(raw_o["energy"]),
@@ -511,12 +495,8 @@ def _build_entities(
     pdu_sensors: list[tuple[str, str, str | None, str | None, str]] = [
         # (key, friendly_suffix, device_class, state_class, unit)
         ("power",        "Power",              SensorDeviceClass.POWER,         SensorStateClass.MEASUREMENT,    UnitOfPower.WATT),
-        ("power_min",    "Power Min",          SensorDeviceClass.POWER,         SensorStateClass.MEASUREMENT,    UnitOfPower.WATT),
-        ("power_max",    "Power Max",          SensorDeviceClass.POWER,         SensorStateClass.MEASUREMENT,    UnitOfPower.WATT),
         ("power_avg",    "Power Avg",          SensorDeviceClass.POWER,         SensorStateClass.MEASUREMENT,    UnitOfPower.WATT),
         ("current",      "Current",            SensorDeviceClass.CURRENT,       SensorStateClass.MEASUREMENT,    UnitOfElectricCurrent.AMPERE),
-        ("current_min",  "Current Min",        SensorDeviceClass.CURRENT,       SensorStateClass.MEASUREMENT,    UnitOfElectricCurrent.AMPERE),
-        ("current_max",  "Current Max",        SensorDeviceClass.CURRENT,       SensorStateClass.MEASUREMENT,    UnitOfElectricCurrent.AMPERE),
         ("voltage",      "Voltage",            SensorDeviceClass.VOLTAGE,       SensorStateClass.MEASUREMENT,    UnitOfElectricPotential.VOLT),
         ("power_factor", "Power Factor",       SensorDeviceClass.POWER_FACTOR,  SensorStateClass.MEASUREMENT,    None),
         ("energy_kwh",   "Energy",             SensorDeviceClass.ENERGY,        SensorStateClass.TOTAL_INCREASING, UnitOfEnergy.KILO_WATT_HOUR),
@@ -535,7 +515,7 @@ def _build_entities(
                 coordinator=coordinator,
                 device_info=device_info,
                 unique_id=f"{host}_{pdu_id}_pdu_{key}",
-                name=f"{name} {suffix}",
+                name=f"{name} - {suffix}",
                 suggested_object_id=obj_id,
                 data_path=("pdu", key),
                 device_class=dev_class,
@@ -549,15 +529,14 @@ def _build_entities(
         # Friendly name uses the live PDU outlet name (updates on next HA restart
         # when the outlet is renamed on the PDU), but entity_id and unique_id are
         # always port-number-based and never change.
-        outlet_label = outlet["name"] or f"Port {port_num:02d}"
+        # Friendly-name prefix: "PortNN - {outlet_name}". The PDU name is
+        # already provided by the device, so it isn't repeated here.
+        outlet_label = f"Port{port_num:02d} - {outlet['name']}".rstrip(" -") \
+            if outlet["name"] else f"Port{port_num:02d}"
 
         outlet_sensors: list[tuple[str, str, str | None, str | None, str | None]] = [
             ("power",        "Power",         SensorDeviceClass.POWER,         SensorStateClass.MEASUREMENT,      UnitOfPower.WATT),
-            ("power_min",    "Power Min",     SensorDeviceClass.POWER,         SensorStateClass.MEASUREMENT,      UnitOfPower.WATT),
-            ("power_max",    "Power Max",     SensorDeviceClass.POWER,         SensorStateClass.MEASUREMENT,      UnitOfPower.WATT),
             ("current",      "Current",       SensorDeviceClass.CURRENT,       SensorStateClass.MEASUREMENT,      UnitOfElectricCurrent.AMPERE),
-            ("current_min",  "Current Min",   SensorDeviceClass.CURRENT,       SensorStateClass.MEASUREMENT,      UnitOfElectricCurrent.AMPERE),
-            ("current_max",  "Current Max",   SensorDeviceClass.CURRENT,       SensorStateClass.MEASUREMENT,      UnitOfElectricCurrent.AMPERE),
             ("voltage",      "Voltage",       SensorDeviceClass.VOLTAGE,       SensorStateClass.MEASUREMENT,      UnitOfElectricPotential.VOLT),
             ("power_factor", "Power Factor",  SensorDeviceClass.POWER_FACTOR,  SensorStateClass.MEASUREMENT,      None),
             ("energy_kwh",   "Energy",        SensorDeviceClass.ENERGY,        SensorStateClass.TOTAL_INCREASING, UnitOfEnergy.KILO_WATT_HOUR),
@@ -567,14 +546,14 @@ def _build_entities(
 
         for key, suffix, dev_class, state_class, unit in outlet_sensors:
             # Entity ID: sensor.pdu01_port03_energy  ← always port-number-based
-            # Friendly name: "PDU01 PVE01 Energy"    ← reflects current PDU label
+            # Friendly name: "Port03 - PVE01 Energy" ← reflects current PDU label
             obj_id = f"{name_slug}_port{port_num:02d}_{key}"
             entities.append(
                 AvocentPDUSensor(
                     coordinator=coordinator,
                     device_info=device_info,
                     unique_id=f"{host}_{pdu_id}_port{port_num:02d}_{key}",
-                    name=f"{name} {outlet_label} {suffix}",
+                    name=f"{outlet_label} {suffix}",
                     suggested_object_id=obj_id,
                     data_path=("outlets", port_num, key),
                     device_class=dev_class,

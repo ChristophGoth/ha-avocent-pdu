@@ -127,39 +127,36 @@ live against a 2× PM3000/10/16A chain.
 
 | Entity                | Class        | State class      | Unit |
 |-----------------------|--------------|------------------|------|
-| `{name} Power`        | power        | measurement      | W    |
-| `{name} Power Min`    | power        | measurement      | W    |
-| `{name} Power Max`    | power        | measurement      | W    |
-| `{name} Power Avg`    | power        | measurement      | W    |
-| `{name} Current`      | current      | measurement      | A    |
-| `{name} Current Min`  | current      | measurement      | A    |
-| `{name} Current Max`  | current      | measurement      | A    |
-| `{name} Voltage`      | voltage      | measurement      | V    |
-| `{name} Power Factor` | power_factor | measurement      | –    |
-| `{name} Energy`       | energy       | total_increasing | kWh  |
+| `{name} - Power`        | power        | measurement      | W    |
+| `{name} - Power Avg`    | power        | measurement      | W    |
+| `{name} - Current`      | current      | measurement      | A    |
+| `{name} - Voltage`      | voltage      | measurement      | V    |
+| `{name} - Power Factor` | power_factor | measurement      | –    |
+| `{name} - Energy`       | energy       | total_increasing | kWh  |
 
 ### Per outlet (port)
 
 The outlet name is read directly from the PDU's SNMP name (OID column `.5.1.4`)
-and shown as the **friendly name** in HA. The **entity ID** is based purely on
-the port number and never changes — even if the outlet is renamed on the PDU.
+and used in the **friendly name**, prefixed with the port number
+(`Port{NN} - {outlet_name}`). The **entity ID** is based purely on the port
+number and never changes — even if the outlet is renamed on the PDU.
 
-| Entity (friendly name)              | Class        | State class      | Unit   |
-|-------------------------------------|--------------|------------------|--------|
-| `{name} {outlet_name} Power`        | power        | measurement      | W      |
-| `{name} {outlet_name} Power Min`    | power        | measurement      | W      |
-| `{name} {outlet_name} Power Max`    | power        | measurement      | W      |
-| `{name} {outlet_name} Current`      | current      | measurement      | A      |
-| `{name} {outlet_name} Current Min`  | current      | measurement      | A      |
-| `{name} {outlet_name} Current Max`  | current      | measurement      | A      |
-| `{name} {outlet_name} Voltage`      | voltage      | measurement      | V      |
-| `{name} {outlet_name} Power Factor` | power_factor | measurement      | –      |
-| `{name} {outlet_name} Energy`       | energy       | total_increasing | kWh    |
+| Entity (friendly name)                  | Class        | State class      | Unit   |
+|-----------------------------------------|--------------|------------------|--------|
+| `Port{NN} - {outlet_name} Power`        | power        | measurement      | W      |
+| `Port{NN} - {outlet_name} Current`      | current      | measurement      | A      |
+| `Port{NN} - {outlet_name} Voltage`      | voltage      | measurement      | V      |
+| `Port{NN} - {outlet_name} Power Factor` | power_factor | measurement      | –      |
+| `Port{NN} - {outlet_name} Energy`       | energy       | total_increasing | kWh    |
+
+Example: `Port06 - Netapp-01 Power`. PDU-level sensors are named `{name} - …`,
+e.g. `PDU01 - Power`.
 
 ### Per outlet (switch)
 
-Each outlet is also exposed as a **switch** (`switch.{slug(name)}_port{NN}`) that
-reflects the outlet state and lets you turn it on/off. The on/off state is read
+Each outlet is also exposed as a **switch** (`switch.{slug(name)}_port{NN}`,
+friendly name `Port{NN} - {outlet_name}`) that reflects the outlet state and
+lets you turn it on/off. The on/off state is read
 from the status column (`.5`: `2` = on, `1` = off); toggling writes the command
 column (`.6`: `2` = on, `3` = off) via an SNMP SET.
 
