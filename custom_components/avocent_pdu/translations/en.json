@@ -7,7 +7,8 @@
         "data": {
           "name": "Name",
           "host": "Host (IP address)",
-          "community": "SNMP community",
+          "community": "SNMP read community",
+          "write_community": "SNMP write community (required to switch outlets; leave empty to reuse the read community)",
           "port": "SNMP port",
           "pdu_id": "PDU ID (chain position, 1 = primary)",
           "scan_interval": "Scan interval (seconds)"

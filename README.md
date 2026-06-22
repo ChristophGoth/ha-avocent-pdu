@@ -77,6 +77,7 @@ sensor:
 | `host`          | ✓        | –        | IP / hostname of the PDU                      |
 | `name`          |          | `PDU`    | Display name (device + entity prefix)         |
 | `community`     |          | `public` | SNMPv2c read community                        |
+| `write_community` |        | –        | SNMPv2c write community (needed to switch outlets; falls back to `community`) |
 | `port`          |          | `161`    | SNMP UDP port                                 |
 | `pdu_id`        |          | `1`      | PDU position in a chain (1–5)                 |
 | `scan_interval` |          | `60`     | Poll interval in seconds                      |
@@ -154,7 +155,38 @@ the port number and never changes — even if the outlet is renamed on the PDU.
 | `{name} {outlet_name} Voltage`      | voltage      | measurement      | V      |
 | `{name} {outlet_name} Power Factor` | power_factor | measurement      | –      |
 | `{name} {outlet_name} Energy`       | energy       | total_increasing | kWh    |
-| `{name} {outlet_name} Status`       | –            | –                | on/off |
+
+### Per outlet (switch)
+
+Each outlet is also exposed as a **switch** (`switch.{slug(name)}_port{NN}`) that
+reflects the outlet state and lets you turn it on/off. The on/off state is read
+from the status column (`.5`: `2` = on, `1` = off); toggling writes the command
+column (`.6`: `2` = on, `3` = off) via an SNMP SET.
+
+Switching requires a **write community** (see [Switching outlets](#switching-outlets)).
+
+---
+
+## Switching outlets
+
+Outlet switches require SNMP **write** access. On most PM3000 units the default
+`public` community is read-only, so a separate **write community** must be set
+(`write_community`). Configure it in the UI ("SNMP write community") or in YAML.
+If left empty, the read community is reused — which only works if that community
+has read-write rights on the PDU; otherwise switching fails with `notWritable`.
+
+The PDU may also restrict SNMP SET by source IP (an ACL). If switching times
+out while reads work, allow the Home Assistant host in the PDU's SNMP ACL.
+
+```yaml
+sensor:
+  - platform: avocent_pdu
+    name: PDU01
+    host: 172.16.9.19
+    community: public          # read
+    write_community: write     # write (for switching)
+    pdu_id: 1
+```
 
 ---
 
@@ -223,10 +255,12 @@ Both tables are indexed by the PDU chain position `{pdu}` (1 = primary,
 | Power avg     | `.3.1.63`                          | `.5.1.63`                                | ×0.1 W    |
 | Power factor  | `.3.1.80`                          | `.5.1.80`                                | ×0.01     |
 | Energy        | `.3.1.105`                         | `.5.1.105`                               | Wh → kWh  |
-| Outlet status | –                                  | `.5.1.5`                                 | 1/2/3/4   |
+| Outlet status (read)  | –                          | `.5.1.5`                                 | 1/2/3/4   |
+| Outlet command (write)| –                          | `.5.1.6`                                 | 2 = on, 3 = off |
 | Owning PDU    | –                                  | `.5.1.8`                                 | string (`'PDU01'`) |
 
-Outlet status values: `1` = on, `2` = off, `3` = reboot, `4` = unavailable.
+Outlet **status** (read column `.5`): `1` = off, `2` = on, `3` = reboot, `4` = unavailable.
+Outlet **command** (write column `.6`): write `2` to switch on, `3` to switch off.
 
 ---
 

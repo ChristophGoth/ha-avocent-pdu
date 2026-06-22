@@ -25,7 +25,8 @@ DOMAIN = "avocent_pdu"
 # ── Configuration keys (configuration.yaml) ──────────────────────────────────
 CONF_HOST       = "host"
 CONF_PORT       = "port"          # SNMP UDP port, default 161
-CONF_COMMUNITY  = "community"     # SNMPv2c community string
+CONF_COMMUNITY  = "community"     # SNMPv2c read community string
+CONF_WRITE_COMMUNITY = "write_community"  # SNMPv2c write community (for switching)
 CONF_PDU_ID     = "pdu_id"        # PDU chain index (1 = primary, 2 = first chained …)
 CONF_NAME       = "name"          # Friendly name for this PDU device, e.g. "PDU01"
 CONF_SCAN_INTERVAL = "scan_interval"  # seconds between polls
@@ -58,7 +59,8 @@ OID_PDU_ENERGY         = f"{_BASE}.3.1.105.1"    # Wh
 # ── Outlet-level OIDs  (.5.1.{field}.1.{pdu}.{outlet}) ───────────────────────
 # Column prefixes only; callers append ".1.{pdu}.{outlet}" to address a cell.
 OID_OUTLET_NAME        = f"{_BASE}.5.1.4"        # string  (outlet label)
-OID_OUTLET_STATUS      = f"{_BASE}.5.1.5"        # 1=on, 2=off, 3=reboot, 4=na
+OID_OUTLET_STATUS      = f"{_BASE}.5.1.5"        # read state: 1=off, 2=on
+OID_OUTLET_COMMAND     = f"{_BASE}.5.1.6"        # write cmd: 2=switch on, 3=switch off
 OID_OUTLET_PDU_NAME    = f"{_BASE}.5.1.8"        # owning PDU name string ('PDU01')
 OID_OUTLET_CURRENT     = f"{_BASE}.5.1.50"       # ×0.1  A
 OID_OUTLET_CURRENT_MIN = f"{_BASE}.5.1.52"       # ×0.1  A
@@ -70,10 +72,14 @@ OID_OUTLET_POWER_MAX   = f"{_BASE}.5.1.61"       # ×0.1  W
 OID_OUTLET_POWER_FACTOR= f"{_BASE}.5.1.80"       # ×0.01
 OID_OUTLET_ENERGY      = f"{_BASE}.5.1.105"      # Wh  (cumulative, monotonically increasing)
 
-# ── Outlet status value map ───────────────────────────────────────────────────
+# ── Outlet status value map (read column .5) ──────────────────────────────────
 OUTLET_STATUS_MAP = {
-    1: "on",
-    2: "off",
+    1: "off",
+    2: "on",
     3: "reboot",
     4: "unavailable",
 }
+
+# ── Outlet switch command values (write column .6) ────────────────────────────
+OUTLET_CMD_ON  = 2
+OUTLET_CMD_OFF = 3

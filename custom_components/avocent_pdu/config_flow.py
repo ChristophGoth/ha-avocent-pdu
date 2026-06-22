@@ -19,6 +19,7 @@ from .const import (
     CONF_HOST,
     CONF_PORT,
     CONF_COMMUNITY,
+    CONF_WRITE_COMMUNITY,
     CONF_PDU_ID,
     CONF_NAME,
     CONF_SCAN_INTERVAL,
@@ -38,6 +39,9 @@ def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(CONF_HOST, default=d.get(CONF_HOST, "")): cv.string,
             vol.Optional(
                 CONF_COMMUNITY, default=d.get(CONF_COMMUNITY, DEFAULT_COMMUNITY)
+            ): cv.string,
+            vol.Optional(
+                CONF_WRITE_COMMUNITY, default=d.get(CONF_WRITE_COMMUNITY, "")
             ): cv.string,
             vol.Optional(CONF_PORT, default=d.get(CONF_PORT, DEFAULT_PORT)): cv.port,
             vol.Optional(
@@ -127,6 +131,7 @@ async def _test_connection(hass, cfg: dict[str, Any]) -> bool:
         host=cfg[CONF_HOST],
         port=cfg.get(CONF_PORT, DEFAULT_PORT),
         community=cfg.get(CONF_COMMUNITY, DEFAULT_COMMUNITY),
+        write_community=cfg.get(CONF_WRITE_COMMUNITY) or None,
         pdu_id=cfg.get(CONF_PDU_ID, DEFAULT_PDU_ID),
         name=cfg.get(CONF_NAME, "PDU"),
         scan_interval=cfg.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),

@@ -78,6 +78,7 @@ from .const import (
     DOMAIN,
     CONF_PORT,
     CONF_COMMUNITY,
+    CONF_WRITE_COMMUNITY,
     CONF_PDU_ID,
     CONF_SCAN_INTERVAL,
     DEFAULT_PORT,
@@ -107,6 +108,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_NAME, default="PDU"): cv.string,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
         vol.Optional(CONF_COMMUNITY, default=DEFAULT_COMMUNITY): cv.string,
+        vol.Optional(CONF_WRITE_COMMUNITY, default=""): cv.string,
         vol.Optional(CONF_PDU_ID, default=DEFAULT_PDU_ID): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=5)
         ),
@@ -138,6 +140,34 @@ def _resolve_hlapi():
         hlapi.ObjectType,
         hlapi.ObjectIdentity,
     )
+
+
+async def _snmp_set_int(host: str, port: int, community: str, oid: str, value: int) -> None:
+    """Async SNMPv2c SET of a single integer-valued OID (pysnmp 7.x API).
+
+    Uses the configured community as the write community. Raises RuntimeError
+    on any SNMP error so callers can surface a failed switch operation.
+    """
+    import pysnmp.hlapi.asyncio as hlapi
+
+    set_cmd = getattr(hlapi, "set_cmd", None) or getattr(hlapi, "setCmd")
+    Integer = hlapi.Integer
+
+    engine = hlapi.SnmpEngine()
+    transport = await hlapi.UdpTransportTarget.create((host, port), timeout=5, retries=2)
+    auth = hlapi.CommunityData(community, mpModel=1)
+
+    error_indication, error_status, error_index, _ = await set_cmd(
+        engine, auth, transport, hlapi.ContextData(),
+        hlapi.ObjectType(hlapi.ObjectIdentity(oid), Integer(value)),
+    )
+    if error_indication:
+        raise RuntimeError(f"SNMP SET error for {oid}: {error_indication}")
+    if error_status:
+        raise RuntimeError(
+            f"SNMP SET error status {error_status.prettyPrint()} "
+            f"at index {error_index} for {oid}"
+        )
 
 
 async def _snmp_get(host: str, port: int, community: str, oids: list[str]) -> dict[str, Any]:
@@ -270,10 +300,14 @@ class AvocentPDUCoordinator(DataUpdateCoordinator):
         pdu_id: int,
         name: str,
         scan_interval: int,
+        write_community: str | None = None,
     ) -> None:
         self.host      = host
         self.port      = port
         self.community = community
+        # Write community for SNMP SET (switching). Falls back to the read
+        # community if not configured.
+        self.write_community = write_community or community
         self.pdu_id    = pdu_id
         self.pdu_name  = name
 
@@ -414,6 +448,7 @@ async def async_setup_platform(
         CONF_HOST: config[CONF_HOST],
         CONF_PORT: config.get(CONF_PORT, DEFAULT_PORT),
         CONF_COMMUNITY: config.get(CONF_COMMUNITY, DEFAULT_COMMUNITY),
+        CONF_WRITE_COMMUNITY: config.get(CONF_WRITE_COMMUNITY, ""),
         CONF_PDU_ID: config.get(CONF_PDU_ID, DEFAULT_PDU_ID),
         CONF_NAME: config.get(CONF_NAME, "PDU"),
         CONF_SCAN_INTERVAL: scan_interval,
@@ -447,14 +482,11 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-def _build_entities(
-    coordinator: "AvocentPDUCoordinator",
-    name: str,
-    host: str,
-    pdu_id: int,
-) -> list[SensorEntity]:
-    """Build all PDU-level and per-outlet sensor entities for one PDU."""
-    device_info = DeviceInfo(
+def build_device_info(
+    coordinator: "AvocentPDUCoordinator", name: str, host: str, pdu_id: int
+) -> DeviceInfo:
+    """DeviceInfo shared by all entities (sensors + switches) of one PDU."""
+    return DeviceInfo(
         identifiers={(DOMAIN, f"{host}_{pdu_id}")},
         name=name,
         manufacturer="Avocent (Vertiv)",
@@ -462,6 +494,16 @@ def _build_entities(
         sw_version=coordinator.data["pdu"].get("model", "PM3000"),
         configuration_url=f"http://{host}/",
     )
+
+
+def _build_entities(
+    coordinator: "AvocentPDUCoordinator",
+    name: str,
+    host: str,
+    pdu_id: int,
+) -> list[SensorEntity]:
+    """Build all PDU-level and per-outlet sensor entities for one PDU."""
+    device_info = build_device_info(coordinator, name, host, pdu_id)
 
     entities: list[SensorEntity] = []
 
@@ -519,7 +561,8 @@ def _build_entities(
             ("voltage",      "Voltage",       SensorDeviceClass.VOLTAGE,       SensorStateClass.MEASUREMENT,      UnitOfElectricPotential.VOLT),
             ("power_factor", "Power Factor",  SensorDeviceClass.POWER_FACTOR,  SensorStateClass.MEASUREMENT,      None),
             ("energy_kwh",   "Energy",        SensorDeviceClass.ENERGY,        SensorStateClass.TOTAL_INCREASING, UnitOfEnergy.KILO_WATT_HOUR),
-            ("status",       "Status",        None,                            None,                              None),
+            # Outlet on/off is exposed as a switch entity (see switch.py),
+            # which both reflects the status and toggles the outlet.
         ]
 
         for key, suffix, dev_class, state_class, unit in outlet_sensors:

@@ -10,6 +10,7 @@ from .const import (
     CONF_HOST,
     CONF_PORT,
     CONF_COMMUNITY,
+    CONF_WRITE_COMMUNITY,
     CONF_PDU_ID,
     CONF_NAME,
     CONF_SCAN_INTERVAL,
@@ -20,7 +21,7 @@ from .const import (
 )
 from .sensor import AvocentPDUCoordinator
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -35,6 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         host=data[CONF_HOST],
         port=data.get(CONF_PORT, DEFAULT_PORT),
         community=data.get(CONF_COMMUNITY, DEFAULT_COMMUNITY),
+        write_community=data.get(CONF_WRITE_COMMUNITY) or None,
         pdu_id=data.get(CONF_PDU_ID, DEFAULT_PDU_ID),
         name=data.get(CONF_NAME, "PDU"),
         scan_interval=scan_interval,
