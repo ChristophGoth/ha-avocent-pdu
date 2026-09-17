@@ -289,49 +289,6 @@ unaffected; only the friendly name updates, on the next restart.
 
 Every version and its changes are listed in the [changelog](CHANGELOG.md).
 
-## Development
-
-Development happens on a private GitLab instance; GitHub carries the published
-releases so that HACS can find them.
-
-A tag on `main` triggers the pipeline in [`.gitlab-ci.yml`](.gitlab-ci.yml):
-
-1. **validate** — syntax check, JSON validation, comparison of the translation
-   files against each other, and a check that the manifest version matches the
-   tag.
-2. **hassfest** — Home Assistant's own manifest and translation checks, run in
-   the same container the hassfest GitHub Action uses.
-3. **package** — builds `avocent_pdu.zip` the way HACS expects it. Built once,
-   so both releases ship identical bytes.
-4. **release-gitlab** — uploads the zip to the generic package registry and
-   publishes a GitLab release linking it. The registry is used because job
-   artifacts expire and a release asset has to outlive them.
-5. **release-to-github** — mirrors the commit and the tag to GitHub, creates a
-   release there and attaches the same zip as an asset.
-
-Release notes for both releases come from the matching section of
-`CHANGELOG.md`.
-
-A release is therefore made like this:
-
-```sh
-# Raise the version in custom_components/avocent_pdu/manifest.json,
-# add a section to CHANGELOG.md, commit both
-git tag v1.1.3
-git push origin main --follow-tags
-```
-
-If the manifest version differs from the tag, the pipeline stops before
-anything is published.
-
-The pipeline needs the CI/CD variable `GITHUB_PAT` — a GitHub token with `repo`
-scope, stored masked and protected.
-
-HACS validation runs on GitHub rather than in the pipeline, because it inspects
-the repository through the GitHub API — description, topics, issues and the
-latest release — so it only says something meaningful once a release has been
-mirrored there.
-
 ## Contributing
 
 A bug report is most useful with the PDU model, the firmware version, an
