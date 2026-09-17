@@ -46,12 +46,15 @@ hassfest:
   tags:
     - docker-privileged
   services:
-    - docker:27-dind
+    - name: docker:27-dind
+      command: ["--tls=false"]
   variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: /certs
-    DOCKER_CERT_PATH: /certs/client
-    DOCKER_TLS_VERIFY: 1
+    # TLS between the job and its own dind service would need a /certs volume
+    # shared by both containers, which this runner does not set up. The service
+    # is reachable only from this job over the runner's private network, so it
+    # speaks plain TCP instead.
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
