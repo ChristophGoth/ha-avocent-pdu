@@ -5,6 +5,13 @@ Alle nennenswerten Änderungen an diesem Projekt werden hier festgehalten.
 Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.1.3]
+
+* Releases entstehen jetzt in GitLab: das HACS-Zip wird dort als Release-Asset
+  veröffentlicht und unverändert nach GitHub gespiegelt.
+* Die Prüfungen von hassfest laufen in der Pipeline mit, die HACS-Validierung
+  nach dem Spiegeln auf GitHub.
+
 ## [1.1.2]
 
 * SNMP-Abfragen laufen nicht mehr im Event-Loop. Das Laden der MIB-Dateien
