@@ -1,10 +1,19 @@
+# GitLab runs the pre-release checks (see .gitlab-ci.yml); hassfest lives there
+# because it validates the working tree. The HACS check does not: it inspects
+# this repository through the GitHub API - description, topics, issues and the
+# latest release - so it only says something meaningful once a release has been
+# mirrored here. Hence: after a release, plus a daily run to catch HACS itself
+# changing its requirements under us.
 name: Validate
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
 
 jobs:
   hacs:
@@ -15,10 +24,3 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-
-  hassfest:
-    name: hassfest
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: home-assistant/actions/hassfest@master
