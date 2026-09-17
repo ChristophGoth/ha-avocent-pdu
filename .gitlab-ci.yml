@@ -40,6 +40,11 @@ validate:
 hassfest:
   stage: validate
   image: docker:27-cli
+  # docker-in-docker needs to mount and load modules, which the plain `docker`
+  # runner is not allowed to do: its dind service cannot write the TLS
+  # certificates and the client then finds no endpoint to talk to.
+  tags:
+    - docker-privileged
   services:
     - docker:27-dind
   variables:
